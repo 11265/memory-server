@@ -1,0 +1,44 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Rust
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+
+    - name: Install Rust targets
+      run: rustup target add aarch64-apple-ios
+
+    - name: Build frontend (Next.js)
+      run: |
+        cd frontend
+        npm install
+        npm run build
+
+    - name: Build backend
+      run: cargo build --release --target aarch64-apple-ios
+
+    - name: List build artifacts
+      run: ls -al target/aarch64-apple-ios/release/
+
+    # 这一步需要手动更新实际的二进制文件名
+    # - name: Strip symbols from binary
+    #   run: strip target/aarch64-apple-ios/release/your_actual_binary_name
+
+    - name: Save build artifacts
+      uses: actions/upload-artifact@v2
+      with:
+        name: build-artifacts
+        path: |
+          frontend/.next
+          target/aarch64-apple-ios/release/
