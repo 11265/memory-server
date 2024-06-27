@@ -6,6 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/sysctl.h>
+#include <mach/mach_vm.h>
+#include <mach/task.h>
+#include <mach/mach_init.h>
+#include <mach/mach_traps.h>
 
 typedef struct {
     int pid;
@@ -23,7 +27,7 @@ int debug_log(const char *format, ...) {
     va_end(list);
     return 0;
 }
-
+//--
 extern "C" ssize_t read_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t size, unsigned char *buffer) {
     debug_log("read_memory_native: pid = %d, address = 0x%llx, size = 0x%llx", pid, address, size);
 
@@ -49,7 +53,7 @@ extern "C" ssize_t read_memory_native(int pid, mach_vm_address_t address, mach_v
     debug_log("read_memory_native: successfully read 0x%llx bytes", out_size);
     return (ssize_t)out_size;
 }
-
+///---------------------------
 extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t size, unsigned char *buffer) {
     debug_log("write_memory_native: pid = %d, address = 0x%llx, size = 0x%llx", pid, address, size);
 
@@ -91,9 +95,9 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
     }
     original_protection = info.protection;
 
-    err = mach_vm_protect(task, address, size, false, VM_PROT_READ | VM_PROT_WRITE);
+    err = vm_protect(task, address, size, false, VM_PROT_READ | VM_PROT_WRITE);
     if (err != KERN_SUCCESS) {
-        debug_log("Error: mach_vm_protect (write enable) failed with error %d (%s)", err, mach_error_string(err));
+        debug_log("Error: vm_protect (write enable) failed with error %d (%s)", err, mach_error_string(err));
         if (!is_embeded_mode) {
             task_resume(task);
         }
@@ -109,9 +113,9 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
         return -1;
     }
 
-    err = mach_vm_protect(task, address, size, false, original_protection);
+    err = vm_protect(task, address, size, false, original_protection);
     if (err != KERN_SUCCESS) {
-        debug_log("Warning: mach_vm_protect (restore protection) failed with error %d (%s)", err, mach_error_string(err));
+        debug_log("Warning: vm_protect (restore protection) failed with error %d (%s)", err, mach_error_string(err));
         if (!is_embeded_mode) {
             task_resume(task);
         }
@@ -130,6 +134,7 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
     return size;
 }
 
+//--------------
 extern "C" void enumerate_regions_to_buffer(pid_t pid, char *buffer, size_t buffer_size) {
     debug_log("enumerate_regions_to_buffer: pid = %d, buffer_size = %zu", pid, buffer_size);
 
