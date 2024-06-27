@@ -19,10 +19,6 @@ jobs:
     - name: Install Rust targets
       run: rustup target add aarch64-apple-ios
 
-    # 注释掉后端测试步骤
-    # - name: Run backend tests
-    #   run: cargo test --lib
-     
     - name: Build frontend (Next.js)
       run: |
         cd frontend
@@ -30,7 +26,14 @@ jobs:
         npm run build
 
     - name: Build backend
-      run: cargo build --target aarch64-apple-ios
+      run: cargo build --release --target aarch64-apple-ios
+
+    - name: List build artifacts
+      run: ls -al target/aarch64-apple-ios/release/
+
+    # 这一步需要手动更新实际的二进制文件名
+    # - name: Strip symbols from binary
+    #   run: strip target/aarch64-apple-ios/release/your_actual_binary_name
 
     - name: Save build artifacts
       uses: actions/upload-artifact@v2
@@ -38,4 +41,4 @@ jobs:
         name: build-artifacts
         path: |
           frontend/.next
-          target/aarch64-apple-ios/debug
+          target/aarch64-apple-ios/release/
