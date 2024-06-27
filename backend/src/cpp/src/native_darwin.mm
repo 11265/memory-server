@@ -79,7 +79,6 @@ extern "C" ssize_t write_memory_native(int pid, vm_address_t address, vm_size_t 
         }
     }
 
-    // 将 mach_vm_address_t 和 mach_vm_size_t 替换为 vm_address_t 和 vm_size_t
     vm_address_t region_address = address;
     vm_size_t region_size = size;
     err = vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name);
@@ -187,13 +186,10 @@ extern "C" ProcessInfo *enumprocess_native(size_t *count) {
     debug_log("enumprocess_native: start");
 
     int err;
-    struct kinfo_proc *result;
-    bool done;
+    struct kinfo_proc *result = NULL;
+    bool done = false;
     static const int name[] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
-    size_t length;
-
-    result = NULL;
-    done = false;
+    size_t length = 0;
 
     do {
         length = 0;
@@ -209,7 +205,7 @@ extern "C" ProcessInfo *enumprocess_native(size_t *count) {
             }
         }
 
-                if (err == 0) {
+        if (err == 0) {
             err = sysctl((int *)name, (sizeof(name) / sizeof(*name)) - 1, result, &length, NULL, 0);
             if (err == -1) {
                 err = errno;
@@ -226,57 +222,7 @@ extern "C" ProcessInfo *enumprocess_native(size_t *count) {
 
     if (err == 0 && result != NULL) {
         *count = length / sizeof(struct kinfo_proc);
-        ProcessInfo *processes = (ProcessInfo *)malloc(*count * sizeof(ProcessInfo));
-
-        for (size_t i = 0; i < *count; i++) {
-            processes[i].pid = result[i].kp_proc.p_pid;
-            processes[i].processname = strdup(result[i].kp_proc.p_comm);
-            debug_log("enumprocess_native: pid = %d, processname = %s", processes[i].pid, processes[i].processname);
-        }
-
-        free(result);
-        debug_log("enumprocess_native: successfully enumerated %zu processes", *count);
-        return processes;
-    } else {
-        if (result != NULL) {
-            free(result);
-        }
-        debug_log("enumprocess_native: failed with error %d", err);
-    }
-    return NULL;
-}
-
-extern "C" bool suspend_process(pid_t pid) {
-    debug_log("suspend_process: pid = %d", pid);
-
-    task_t task;
-    kern_return_t err;
-    bool is_embeded_mode = pid == getpid();
-    if (is_embeded_mode) {
-        debug_log("suspend_process: cannot suspend the current process");
-        return false;
-    }
-    err = task_for_pid(mach_task_self(), pid, &task);
-    if (err != KERN_SUCCESS) {
-        debug_log("Error: task_for_pid failed with error %d (%s)", err, mach_error_string(err));
-                if (err == 0) {
-            err = sysctl((int *)name, (sizeof(name) / sizeof(*name)) - 1, result, &length, NULL, 0);
-            if (err == -1) {
-                err = errno;
-            }
-            if (err == 0) {
-                done = true;
-            } else if (err == ENOMEM) {
-                free(result);
-                result = NULL;
-                err = 0;
-            }
-        }
-    } while (err == 0 && !done);
-
-    if (err == 0 && result != NULL) {
-        *count = length / sizeof(struct kinfo_proc);
-        ProcessInfo *processes = (ProcessInfo *)malloc(*count * sizeof(ProcessInfo));
+                ProcessInfo *processes = (ProcessInfo *)malloc(*count * sizeof(ProcessInfo));
 
         for (size_t i = 0; i < *count; i++) {
             processes[i].pid = result[i].kp_proc.p_pid;
