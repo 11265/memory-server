@@ -12,7 +12,7 @@ typedef struct {
     char *processname;
 } ProcessInfo;
 
-extern "C" kern_return_t vm_read_overwrite(vm_map_t, mach_vm_address_t, mach_vm_size_t, mach_vm_address_t, mach_vm_size_t *);
+extern "C" kern_return_t vm_read_overwrite(vm_map_t, vm_address_t, vm_size_t, vm_address_t, vm_size_t *);
 
 int debug_log(const char *format, ...) {
     va_list list;
@@ -24,8 +24,8 @@ int debug_log(const char *format, ...) {
     return 0;
 }
 
-extern "C" ssize_t read_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t size, unsigned char *buffer) {
-    debug_log("read_memory_native: pid = %d, address = 0x%llx, size = 0x%llx", pid, address, size);
+extern "C" ssize_t read_memory_native(int pid, vm_address_t address, vm_size_t size, unsigned char *buffer) {
+    debug_log("read_memory_native: pid = %d, address = 0x%lx, size = 0x%lx", pid, address, size);
 
     mach_port_t task;
     kern_return_t kr;
@@ -39,19 +39,19 @@ extern "C" ssize_t read_memory_native(int pid, mach_vm_address_t address, mach_v
         }
     }
 
-    mach_vm_size_t out_size;
-    kr = vm_read_overwrite(task, address, size, (mach_vm_address_t)buffer, &out_size);
+    vm_size_t out_size;
+    kr = vm_read_overwrite(task, address, size, (vm_address_t)buffer, &out_size);
     if (kr != KERN_SUCCESS) {
         debug_log("Error: vm_read_overwrite failed with error %d (%s)", kr, mach_error_string(kr));
         return -1;
     }
 
-    debug_log("read_memory_native: successfully read 0x%llx bytes", out_size);
+    debug_log("read_memory_native: successfully read 0x%lx bytes", out_size);
     return (ssize_t)out_size;
 }
 
-extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_vm_size_t size, unsigned char *buffer) {
-    debug_log("write_memory_native: pid = %d, address = 0x%llx, size = 0x%llx", pid, address, size);
+extern "C" ssize_t write_memory_native(int pid, vm_address_t address, vm_size_t size, unsigned char *buffer) {
+    debug_log("write_memory_native: pid = %d, address = 0x%lx, size = 0x%lx", pid, address, size);
 
     task_t task;
     kern_return_t err;
@@ -79,11 +79,12 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
         }
     }
 
-    mach_vm_address_t region_address = address;
-    mach_vm_size_t region_size = size;
+    // 将 mach_vm_address_t 和 mach_vm_size_t 替换为 vm_address_t 和 vm_size_t
+    vm_address_t region_address = address;
+    vm_size_t region_size = size;
     err = vm_region(task, &region_address, &region_size, VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &info_count, &object_name);
     if (err != KERN_SUCCESS) {
-        debug_log("Error: vm_region failed with error %d (%s) at address 0x%llx, size 0x%llx", err, mach_error_string(err), address, size);
+        debug_log("Error: vm_region failed with error %d (%s) at address 0x%lx, size 0x%lx", err, mach_error_string(err), address, size);
         if (!is_embeded_mode) {
             task_resume(task);
         }
@@ -126,7 +127,7 @@ extern "C" ssize_t write_memory_native(int pid, mach_vm_address_t address, mach_
         }
     }
 
-    debug_log("write_memory_native: successfully wrote 0x%llx bytes", size);
+    debug_log("write_memory_native: successfully wrote 0x%lx bytes", size);
     return size;
 }
 
@@ -156,7 +157,7 @@ extern "C" void enumerate_regions_to_buffer(pid_t pid, char *buffer, size_t buff
         mach_msg_type_number_t info_count = VM_REGION_SUBMAP_INFO_COUNT_64;
 
         if (vm_region_recurse_64(task, &address, &size, &depth, (vm_region_info_t)&info, &info_count) != KERN_SUCCESS) {
-            debug_log("Error: vm_region_recurse_64 failed at address 0x%llx", address);
+            debug_log("Error: vm_region_recurse_64 failed at address 0x%lx", address);
             break;
         }
 
@@ -171,8 +172,8 @@ extern "C" void enumerate_regions_to_buffer(pid_t pid, char *buffer, size_t buff
             if (info.protection & VM_PROT_EXECUTE)
                 protection[2] = 'x';
 
-            pos += snprintf(buffer + pos, buffer_size - pos, "%llx-%llx %s\n", (unsigned long long)address, (unsigned long long)(address + size), protection);
-            debug_log("enumerate_regions_to_buffer: region %llx-%llx, protection = %s", (unsigned long long)address, (unsigned long long)(address + size), protection);
+            pos += snprintf(buffer + pos, buffer_size - pos, "%lx-%lx %s\n", (unsigned long)address, (unsigned long)(address + size), protection);
+            debug_log("enumerate_regions_to_buffer: region %lx-%lx, protection = %s", (unsigned long)address, (unsigned long)(address + size), protection);
 
             if (pos >= buffer_size - 1)
                 break;
@@ -186,7 +187,7 @@ extern "C" ProcessInfo *enumprocess_native(size_t *count) {
     debug_log("enumprocess_native: start");
 
     int err;
-        struct kinfo_proc *result;
+    struct kinfo_proc *result;
     bool done;
     static const int name[] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL, 0};
     size_t length;
@@ -208,7 +209,57 @@ extern "C" ProcessInfo *enumprocess_native(size_t *count) {
             }
         }
 
-        if (err == 0) {
+                if (err == 0) {
+            err = sysctl((int *)name, (sizeof(name) / sizeof(*name)) - 1, result, &length, NULL, 0);
+            if (err == -1) {
+                err = errno;
+            }
+            if (err == 0) {
+                done = true;
+            } else if (err == ENOMEM) {
+                free(result);
+                result = NULL;
+                err = 0;
+            }
+        }
+    } while (err == 0 && !done);
+
+    if (err == 0 && result != NULL) {
+        *count = length / sizeof(struct kinfo_proc);
+        ProcessInfo *processes = (ProcessInfo *)malloc(*count * sizeof(ProcessInfo));
+
+        for (size_t i = 0; i < *count; i++) {
+            processes[i].pid = result[i].kp_proc.p_pid;
+            processes[i].processname = strdup(result[i].kp_proc.p_comm);
+            debug_log("enumprocess_native: pid = %d, processname = %s", processes[i].pid, processes[i].processname);
+        }
+
+        free(result);
+        debug_log("enumprocess_native: successfully enumerated %zu processes", *count);
+        return processes;
+    } else {
+        if (result != NULL) {
+            free(result);
+        }
+        debug_log("enumprocess_native: failed with error %d", err);
+    }
+    return NULL;
+}
+
+extern "C" bool suspend_process(pid_t pid) {
+    debug_log("suspend_process: pid = %d", pid);
+
+    task_t task;
+    kern_return_t err;
+    bool is_embeded_mode = pid == getpid();
+    if (is_embeded_mode) {
+        debug_log("suspend_process: cannot suspend the current process");
+        return false;
+    }
+    err = task_for_pid(mach_task_self(), pid, &task);
+    if (err != KERN_SUCCESS) {
+        debug_log("Error: task_for_pid failed with error %d (%s)", err, mach_error_string(err));
+                if (err == 0) {
             err = sysctl((int *)name, (sizeof(name) / sizeof(*name)) - 1, result, &length, NULL, 0);
             if (err == -1) {
                 err = errno;
